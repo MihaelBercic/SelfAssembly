@@ -1,11 +1,10 @@
 package ui
 
 import javafx.fxml.FXML
-import javafx.scene.layout.Pane
+import javafx.geometry.Insets
+import javafx.scene.control.*
+import javafx.scene.layout.*
 import javafx.scene.paint.Color
-import kotlin.math.floor
-import kotlin.math.min
-import kotlin.random.Random
 
 
 /**
@@ -17,74 +16,169 @@ class Controller {
 
     private val canvas = ResizeableCanvas()
     private var scale = 1.0
-    private val gridSize = 10
+    private val gridSize = 100
     private val blockSize = 100.0
 
-    private val grid = Array(gridSize) { row -> Array(gridSize) { column -> Block(row, column) } }
-    private var currentDrawingFrom = grid[0][0]
+    private val viewport = ViewPort()
 
     @FXML
-    private var canvasPane: Pane? = null
+    private lateinit var canvasPane: Pane
+
+    @FXML
+    private lateinit var northField: TextField
+
+    @FXML
+    private lateinit var westField: TextField
+
+    @FXML
+    private lateinit var eastField: TextField
+
+    @FXML
+    private lateinit var southField: TextField
+
+    @FXML
+    private lateinit var colorPicker: ColorPicker
+
+    @FXML
+    private lateinit var isSpecialCheckbox: CheckBox
+
+    @FXML
+    private lateinit var newButton: Button
+
+    @FXML
+    private lateinit var importButton: Button
+
+    @FXML
+    private lateinit var saveButton: Button
+
+    @FXML
+    private lateinit var exportButton: Button
+
+    @FXML
+    private lateinit var borderPane: BorderPane
+
+    @FXML
+    private lateinit var flowPane: FlowPane
+
+    @FXML
+    private lateinit var parentBox: HBox
+
+    private val inputFields = mutableListOf<TextField>()
+    private val digitRegex = Regex("[^0-9]")
+    private val blockSet = mutableListOf<BlockCandidate>()
+    private var currentAction: ActionType = ActionType.New
+    private var currentCandidate: BlockCandidate = BlockCandidate()
 
     @FXML
     fun initialize() {
-        canvasPane?.apply {
-            grid.forEach { row -> row.forEach { it.color = Color.grayRgb(Random.nextInt(255)) } }
-
+        saveButton.disableProperty().bindBidirectional(parentBox.disableProperty())
+        canvasPane.apply {
             canvas.onResize = { drawGrid() }
-
             children.add(canvas)
             canvas.widthProperty().bind(widthProperty())
             canvas.heightProperty().bind(heightProperty())
 
             setOnScroll { event ->
-                scale += event.deltaY / 1000.0
-                drawGrid(event.x, event.y)
+                viewport.xOffset += event.deltaX
+                viewport.yOffset += event.deltaY
+                drawGrid()
+            }
+
+            setOnZoom { event ->
+                scale *= event.zoomFactor
+                drawGrid()
+            }
+
+            inputFields.addAll(listOf(northField, southField, eastField, westField))
+        }
+
+        inputFields.forEach { field ->
+            field.setOnKeyTyped { event ->
+                if (event.character.contains(digitRegex)) Alert(Alert.AlertType.ERROR, "Only digits allowed.", ButtonType.OK).apply {
+                    headerText = "Please use digits only."
+                    showAndWait()
+                    field.deletePreviousChar()
+                }
+            }
+        }
+
+        colorPicker.setOnAction {
+            borderPane.background = Background(BackgroundFill(colorPicker.value, CornerRadii.EMPTY, Insets.EMPTY))
+        }
+
+
+        newButton.apply {
+            setOnAction {
+                when (currentAction) {
+                    ActionType.New -> {
+                        parentBox.disableProperty().value = false
+                        currentAction = ActionType.Cancel
+                    }
+                    ActionType.Cancel, ActionType.Edit -> {
+                        if (currentAction == ActionType.Edit) {
+                            blockSet.remove(currentCandidate)
+                            repopulateFlowPane()
+                        }
+                        parentBox.disableProperty().value = true
+                        inputFields.forEach { it.text = "" }
+                        currentAction = ActionType.New
+                    }
+                }
+                text = currentAction.name
+            }
+        }
+
+        saveButton.apply {
+            setOnAction {
+                if (currentAction == ActionType.Cancel) blockSet.add(currentCandidate)
+                val north = northField.text.toIntOrNull() ?: -1
+                val south = southField.text.toIntOrNull() ?: -1
+                val east = eastField.text.toIntOrNull() ?: -1
+                val west = westField.text.toIntOrNull() ?: -1
+                parentBox.disableProperty().value = true
+                repopulateFlowPane()
             }
         }
     }
 
+    private fun repopulateFlowPane() {
+        val components = blockSet.map { blockCandidate ->
+            BlockComponent(blockCandidate).apply {
+                setOnMouseClicked { currentCandidate = blockCandidate }
+            }
+        }
+        flowPane.children.setAll(components)
+    }
 
-    private fun drawGrid(x: Double = 0.0, y: Double = 0.0) {
-        val graphics = canvas.graphicsContext2D.apply {
+    private fun drawGrid() {
+        canvas.graphicsContext2D.apply {
             clearRect(0.0, 0.0, canvas.width, canvas.height)
+            val blockSize = blockSize * scale
+            fillRect(viewport.xOffset, viewport.yOffset, blockSize, blockSize)
         }
-
-
-        val blockSize = blockSize * scale
-        val horizontalCount = min(gridSize, (canvas.width / blockSize).toInt())
-        val verticalCount = min(gridSize, (canvas.height / blockSize).toInt())
-
-        val centerRow = floor(y / blockSize).toInt()
-        val centerColumn = floor(x / blockSize).toInt()
-
-        val canvasCenterX = canvas.width / 2
-        val canvasCenterY = canvas.height / 2
-
-
-        val differenceX = canvasCenterX - x
-        val differenceY = canvasCenterY - y
-
-        var positionY = differenceY
-        var positionX = differenceX
-
-        println("$positionY, $positionX")
-
-        for (row in 0 until verticalCount) {
-            val rectHeight = blockSize
-            for (column in 0 until horizontalCount) {
-                val rectWidth = blockSize
-                val block = grid[row][column]
-                graphics.fill = block.color
-                graphics.fillRect(positionX, positionY, rectWidth, rectHeight)
-                positionX += rectWidth
-            }
-            positionY += rectHeight
-            positionX = 0.0
-        }
-        graphics.fill = Color.ORANGE
-        graphics.fillOval(canvasCenterX, canvasCenterY, 10.0, 10.0)
     }
-
-    data class Block(val row: Int, val column: Int, var color: Color = Color.TRANSPARENT)
 }
+
+data class ViewPort(var xOffset: Double = 0.0, var yOffset: Double = 0.0, var row: Int = 0, var column: Int = 0)
+
+data class BlockCandidate(
+    var north: Int = -1,
+    var south: Int = -1,
+    var east: Int = -1,
+    var west: Int = -1,
+    var color: String = Color.ORANGERED.asHex
+)
+
+enum class ActionType {
+    New,
+    Cancel,
+    Edit
+}
+
+val Color.asHex
+    get(): String = String.format(
+        "#%02x%02x%02x",
+        (red * 255).toInt(),
+        (green * 255).toInt(),
+        (blue * 255).toInt()
+    )
