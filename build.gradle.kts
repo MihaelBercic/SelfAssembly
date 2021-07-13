@@ -20,6 +20,7 @@ dependencies {
     testImplementation(kotlin("test"))
     implementation("org.openjfx:javafx:17-ea+14")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.2.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.1")
 
     javafx {
         modules("javafx.controls", "javafx.fxml", "javafx.media")

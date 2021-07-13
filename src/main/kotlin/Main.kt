@@ -29,4 +29,7 @@ fun loadComponent(path: String, controller: Any? = null): Parent {
     }
 }
 
-fun main() = Application.launch(Window::class.java)
+fun main() {
+    System.setProperty("kotlinx.coroutines.scheduler", "off")
+    Application.launch(Window::class.java)
+}

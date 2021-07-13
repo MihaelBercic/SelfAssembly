@@ -29,16 +29,19 @@ class ComponentController(val candidate: BlockCandidate) {
 
     @FXML
     fun initialize() {
-        northLabel.text = if (candidate.north >= 0) "${candidate.north}" else ""
-        southLabel.text = if (candidate.south >= 0) "${candidate.south}" else ""
-        eastLabel.text = if (candidate.east >= 0) "${candidate.east}" else ""
-        westLabel.text = if (candidate.west >= 0) "${candidate.west}" else ""
-
-        if (candidate.isSeed) {
-            println("Adding style...")
-            gridPane.style += "-fx-border-style: dashed;" +
-                    "-fx-border-width: 2;" +
-                    "-fx-border-color: blue;"
+        candidate.sides.forEach { (position, value) ->
+            val label = when (position) {
+                Direction.North -> northLabel
+                Direction.South -> southLabel
+                Direction.West -> westLabel
+                Direction.East -> eastLabel
+            }
+            label.text = "$value"
         }
+
+        if (candidate.isSeed) gridPane.style += "-fx-border-style: dashed;" +
+                "-fx-border-width: 2;" +
+                "-fx-border-color: blue;"
+
     }
 }

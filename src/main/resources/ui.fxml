@@ -63,7 +63,7 @@
                   <Pane fx:id="canvasPane" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS" />
                   <HBox alignment="CENTER" prefHeight="50.0" prefWidth="200.0">
                      <children>
-                        <Button mnemonicParsing="false" text="Start simulation" />
+                        <Button fx:id="startSimulationButton" mnemonicParsing="false" text="Start simulation" />
                      </children>
                   </HBox>
                </children>

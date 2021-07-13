@@ -1,5 +1,6 @@
 import javafx.scene.paint.Color
 import kotlinx.serialization.Serializable
+import ui.Direction
 import ui.asHex
 
 /**
@@ -9,10 +10,7 @@ import ui.asHex
  */
 @Serializable
 data class BlockCandidate(
-    var north: Int = -1,
-    var south: Int = -1,
-    var east: Int = -1,
-    var west: Int = -1,
+    val sides: MutableMap<Direction, Int> = mutableMapOf(),
     var color: String = Color.ORANGERED.asHex,
     var isSeed: Boolean = false
 )
