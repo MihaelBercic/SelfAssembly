@@ -58,7 +58,16 @@
     </MenuBar>
       <HBox VBox.vgrow="ALWAYS">
          <children>
-            <Pane fx:id="canvasPane" prefHeight="200.0" prefWidth="200.0" HBox.hgrow="ALWAYS" />
+            <VBox HBox.hgrow="ALWAYS">
+               <children>
+                  <Pane fx:id="canvasPane" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS" />
+                  <HBox alignment="CENTER" prefHeight="50.0" prefWidth="200.0">
+                     <children>
+                        <Button mnemonicParsing="false" text="Start simulation" />
+                     </children>
+                  </HBox>
+               </children>
+            </VBox>
             <VBox alignment="TOP_CENTER" prefWidth="300.0" HBox.hgrow="NEVER">
                <children>
                   <HBox fx:id="parentBox" disable="true" spacing="10.0">
@@ -66,7 +75,7 @@
                         <VBox alignment="CENTER_LEFT" spacing="10.0" HBox.hgrow="ALWAYS">
                            <children>
                               <ColorPicker fx:id="colorPicker" />
-                              <CheckBox fx:id="isSpecialCheckbox" mnemonicParsing="false" text="Special" />
+                              <CheckBox fx:id="isSpecialCheckbox" mnemonicParsing="false" text="Is seed" />
                            </children>
                         </VBox>
                         <BorderPane fx:id="borderPane" maxHeight="130.0" maxWidth="130.0" prefHeight="130.0" prefWidth="130.0" style="-fx-background-color: lightgray;" HBox.hgrow="ALWAYS">
@@ -99,7 +108,10 @@
                         <Button fx:id="exportButton" mnemonicParsing="false" text="Export" />
                      </children>
                   </HBox>
-                  <FlowPane fx:id="flowPane" hgap="5.0" prefHeight="200.0" prefWidth="200.0" vgap="5.0" />
+                  <FlowPane fx:id="flowPane" hgap="5.0" prefHeight="200.0" prefWidth="200.0" style="-fx-background-color: rgba(0,0,0, .03);" vgap="5.0" VBox.vgrow="ALWAYS">
+                     <padding>
+                        <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                     </padding></FlowPane>
                </children></VBox>
          </children>
       </HBox>

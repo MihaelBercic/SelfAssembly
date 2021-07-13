@@ -14,15 +14,19 @@ import ui.Controller
 class Window : Application() {
 
     override fun start(primaryStage: Stage) {
-        val controller = Controller()
-        val loader = FXMLLoader(javaClass.getResource("/ui.fxml")).apply {
-            setController(controller)
+        val mainController = Controller(primaryStage)
+        loadComponent("/ui.fxml", mainController).apply {
+            primaryStage.scene = Scene(this)
+            primaryStage.show()
         }
-        val root = loader.load<Parent>()
-        primaryStage.scene = Scene(root)
-        primaryStage.show()
     }
+}
 
+fun loadComponent(path: String, controller: Any? = null): Parent {
+    FXMLLoader(Application::class.java.getResource(path)).apply {
+        setController(controller)
+        return load()
+    }
 }
 
 fun main() = Application.launch(Window::class.java)

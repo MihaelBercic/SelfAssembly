@@ -1,10 +1,18 @@
 package ui
 
+import BlockCandidate
 import javafx.fxml.FXML
 import javafx.geometry.Insets
+import javafx.scene.Cursor
 import javafx.scene.control.*
 import javafx.scene.layout.*
 import javafx.scene.paint.Color
+import javafx.stage.FileChooser
+import javafx.stage.Stage
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import loadComponent
 
 
 /**
@@ -12,7 +20,7 @@ import javafx.scene.paint.Color
  * on 09/07/2021 at 00:40
  * using IntelliJ IDEA
  */
-class Controller {
+class Controller(private val stage: Stage) {
 
     private val canvas = ResizeableCanvas()
     private var scale = 1.0
@@ -77,6 +85,28 @@ class Controller {
             children.add(canvas)
             canvas.widthProperty().bind(widthProperty())
             canvas.heightProperty().bind(heightProperty())
+            canvas.cursor = Cursor.OPEN_HAND
+
+            var lastX = 0.0
+            var lastY = 0.0
+
+            setOnMousePressed {
+                lastX = it.x
+                lastY = it.y
+                canvas.cursor = Cursor.CLOSED_HAND
+            }
+
+            setOnMouseReleased {
+                canvas.cursor = Cursor.OPEN_HAND
+            }
+
+            setOnMouseDragged { event ->
+                viewport.xOffset += event.x - lastX
+                viewport.yOffset += event.y - lastY
+                lastX = event.x
+                lastY = event.y
+                drawGrid()
+            }
 
             setOnScroll { event ->
                 viewport.xOffset += event.deltaX
@@ -110,18 +140,13 @@ class Controller {
         newButton.apply {
             setOnAction {
                 when (currentAction) {
-                    ActionType.New -> {
-                        parentBox.disableProperty().value = false
-                        currentAction = ActionType.Cancel
-                    }
-                    ActionType.Cancel, ActionType.Edit -> {
-                        if (currentAction == ActionType.Edit) {
+                    ActionType.New -> setAction(ActionType.Cancel)
+                    ActionType.Cancel, ActionType.Remove -> {
+                        if (currentAction == ActionType.Remove) {
                             blockSet.remove(currentCandidate)
                             repopulateFlowPane()
                         }
-                        parentBox.disableProperty().value = true
-                        inputFields.forEach { it.text = "" }
-                        currentAction = ActionType.New
+                        setAction(ActionType.New)
                     }
                 }
                 text = currentAction.name
@@ -130,24 +155,86 @@ class Controller {
 
         saveButton.apply {
             setOnAction {
-                if (currentAction == ActionType.Cancel) blockSet.add(currentCandidate)
-                val north = northField.text.toIntOrNull() ?: -1
-                val south = southField.text.toIntOrNull() ?: -1
-                val east = eastField.text.toIntOrNull() ?: -1
-                val west = westField.text.toIntOrNull() ?: -1
-                parentBox.disableProperty().value = true
+                currentCandidate.apply {
+                    if (currentAction == ActionType.Cancel) blockSet.add(this)
+                    north = northField.text.toIntOrNull() ?: -1
+                    south = southField.text.toIntOrNull() ?: -1
+                    east = eastField.text.toIntOrNull() ?: -1
+                    west = westField.text.toIntOrNull() ?: -1
+                    color = colorPicker.value.asHex
+                    isSeed = isSpecialCheckbox.isSelected
+                }
+                setAction(ActionType.New)
+                currentCandidate = BlockCandidate()
                 repopulateFlowPane()
+            }
+        }
+
+        exportButton.setOnAction {
+            FileChooser().apply {
+                title = "Select export location"
+                initialFileName = "Block-Candidates.json"
+                selectedExtensionFilter = FileChooser.ExtensionFilter("JSON", "*.json")
+                showSaveDialog(stage)?.apply {
+                    createNewFile()
+                    writeText(Json.encodeToString(blockSet))
+                }
+            }
+        }
+        importButton.setOnAction {
+            FileChooser().apply {
+                title = "Select file to import"
+                selectedExtensionFilter = FileChooser.ExtensionFilter("JSON", "*.json")
+                showOpenDialog(stage)?.apply {
+                    val text = readText()
+                    blockSet.clear()
+                    blockSet.addAll(Json.decodeFromString(text))
+                    repopulateFlowPane()
+                    setAction(ActionType.New)
+                }
             }
         }
     }
 
     private fun repopulateFlowPane() {
         val components = blockSet.map { blockCandidate ->
-            BlockComponent(blockCandidate).apply {
-                setOnMouseClicked { currentCandidate = blockCandidate }
+            val controller = ComponentController(blockCandidate)
+            loadComponent("/BlockComponent.fxml", controller).apply {
+                style += "-fx-background-color: ${blockCandidate.color};"
+                setOnMouseClicked {
+                    currentCandidate = blockCandidate
+                    setAction(ActionType.Remove)
+                    northField.text = controller.northLabel.text
+                    southField.text = controller.southLabel.text
+                    eastField.text = controller.eastLabel.text
+                    westField.text = controller.westLabel.text
+                    isSpecialCheckbox.isSelected = currentCandidate.isSeed
+
+                    Color.web(blockCandidate.color).apply {
+                        colorPicker.value = this
+                        borderPane.background = Background(BackgroundFill(this, CornerRadii.EMPTY, Insets.EMPTY))
+                    }
+                    setAction(ActionType.Remove)
+                }
             }
         }
         flowPane.children.setAll(components)
+    }
+
+    private fun setAction(actionType: ActionType) {
+        when (actionType) {
+            ActionType.New -> {
+                parentBox.disableProperty().value = true
+                isSpecialCheckbox.isSelected = false
+                inputFields.forEach { it.text = "" }
+            }
+            ActionType.Cancel -> {
+                parentBox.disableProperty().value = false
+            }
+            ActionType.Remove -> parentBox.disableProperty().value = false
+        }
+        currentAction = actionType
+        newButton.text = actionType.name
     }
 
     private fun drawGrid() {
@@ -157,22 +244,6 @@ class Controller {
             fillRect(viewport.xOffset, viewport.yOffset, blockSize, blockSize)
         }
     }
-}
-
-data class ViewPort(var xOffset: Double = 0.0, var yOffset: Double = 0.0, var row: Int = 0, var column: Int = 0)
-
-data class BlockCandidate(
-    var north: Int = -1,
-    var south: Int = -1,
-    var east: Int = -1,
-    var west: Int = -1,
-    var color: String = Color.ORANGERED.asHex
-)
-
-enum class ActionType {
-    New,
-    Cancel,
-    Edit
 }
 
 val Color.asHex
