@@ -132,18 +132,18 @@ class Controller(private val stage: Stage) {
             inputFields.addAll(listOf(northField, southField, eastField, westField))
         }
 
+        val drawnAlready = mutableSetOf<Int>()
         object : AnimationTimer() {
             override fun handle(now: Long) {
+                drawnAlready.clear()
                 val graphics = canvas.graphicsContext2D
-                graphics.clearRect(0.0, 0.0, canvas.width, canvas.height)
                 val blockSize = blockSize * scale
-                val centerX = ((viewport.width.value + viewport.xOffset) / blockSize).toInt() / 2
-                val centerY = ((canvas.height / 2 + viewport.yOffset) / blockSize).toInt()
+                val centerX = (-viewport.xOffset / blockSize).toInt()
+                val centerY = (-viewport.yOffset / blockSize).toInt()
 
-                println("$centerX, $centerY")
                 val position = centerX with centerY
-
-                root?.draw(null, viewport, blockSize, graphics)
+                graphics.clearRect(0.0, 0.0, canvas.width, canvas.height)
+                map[position]?.draw(drawnAlready, viewport, blockSize, graphics)
             }
         }.start()
 
@@ -291,7 +291,10 @@ class Controller(private val stage: Stage) {
             if (directionNode == null) {
                 val candidate = findAppropriate(coordinate) ?: throw Exception("No suitable candidate found.")
                 Node(coordinate, candidate).apply {
-                    neighbours[direction.opposite] = node
+                    Direction.values().forEach { direction ->
+                        val neighbour = map[coordinate step direction]
+                        if (neighbour != null) neighbours[direction] = neighbour
+                    }
                     map[coordinate] = this
                     node.neighbours[direction] = this
                     toGrow.add(this)
@@ -332,7 +335,8 @@ data class Node(
     val neighbours: MutableMap<Direction, Node> = mutableMapOf()
 ) {
 
-    fun draw(comingFrom: Node?, viewport: ViewPort, blockSize: Double, graphics: GraphicsContext) {
+    fun draw(drawn: MutableSet<Int>, viewport: ViewPort, blockSize: Double, graphics: GraphicsContext) {
+        drawn.add(position)
         val coordinate = position.asCoordinates
         val x = coordinate.first
         val y = coordinate.second
@@ -343,7 +347,7 @@ data class Node(
         if (viewport.shouldBeDrawn(xScreen, yScreen)) {
             graphics.fill = Color.web(blockCandidate.color)
             graphics.fillRect(viewport.xOffset + x * blockSize, viewport.yOffset + y * blockSize, blockSize, blockSize)
-            neighbours.values.toList().forEach { if (it != comingFrom) it.draw(this, viewport, blockSize, graphics) }
+            neighbours.values.toList().forEach { if (!drawn.contains(it.position)) it.draw(drawn, viewport, blockSize, graphics) }
         }
     }
 
