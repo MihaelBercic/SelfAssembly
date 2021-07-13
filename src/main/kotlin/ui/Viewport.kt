@@ -13,4 +13,8 @@ data class ViewPort(
     var yOffset: Double = 0.0,
     val width: DoubleProperty = SimpleDoubleProperty(0.0),
     val height: DoubleProperty = SimpleDoubleProperty(0.0)
-)
+) {
+    fun shouldBeDrawn(x: Double, y: Double): Boolean {
+        return 0 <= x && x <= width.value && 0 <= y && y <= height.value
+    }
+}

@@ -137,6 +137,12 @@ class Controller(private val stage: Stage) {
                 val graphics = canvas.graphicsContext2D
                 graphics.clearRect(0.0, 0.0, canvas.width, canvas.height)
                 val blockSize = blockSize * scale
+                val centerX = ((viewport.width.value + viewport.xOffset) / blockSize).toInt() / 2
+                val centerY = ((canvas.height / 2 + viewport.yOffset) / blockSize).toInt()
+
+                println("$centerX, $centerY")
+                val position = centerX with centerY
+
                 root?.draw(null, viewport, blockSize, graphics)
             }
         }.start()
@@ -202,11 +208,8 @@ class Controller(private val stage: Stage) {
                 title = "Select file to import"
                 selectedExtensionFilter = FileChooser.ExtensionFilter("JSON", "*.json")
                 showOpenDialog(stage)?.apply {
-                    val text = readText()
                     candidateSet.clear()
-                    candidateSet.addAll(Json.decodeFromString(text))
-
-                    // [{"sides":{"North":0,"West":1},"color":"#99b3ff","isSeed":true},{"sides":{"North":0,"South":0,"West":3},"color":"#99b3ff"},{"sides":{"North":2,"East":1,"West":1},"color":"#ff9966"},{"sides":{"North":3,"South":3,"East":2,"West":2},"color":"#99b3ff"},{"sides":{"North":3,"South":2,"East":3,"West":2},"color":"#99b3ff"},{"sides":{"North":2,"South":2,"East":2,"West":2},"color":"#ff9966"},{"sides":{"North":2,"South":3,"East":3,"West":3},"color":"#ff9966"}]
+                    candidateSet.addAll(Json.decodeFromString(readText()))
                     repopulateFlowPane()
                     setAction(ActionType.New)
                 }
@@ -297,11 +300,10 @@ class Controller(private val stage: Stage) {
         }
         toGrow.forEach {
             GlobalScope.launch {
-                delay(200)
+                delay(500)
                 grow(it)
             }
         }
-        scale *= 0.99999
     }
 
     private fun findAppropriate(coordinate: Int): BlockCandidate? {
@@ -335,9 +337,10 @@ data class Node(
         val x = coordinate.first
         val y = coordinate.second
 
-        val xScreen = x * blockSize
-        val yScreen = y * blockSize
-        if (xScreen <= viewport.xOffset + viewport.width.value && yScreen <= viewport.yOffset + viewport.width.value) {
+        val xScreen = x * blockSize + viewport.xOffset
+        val yScreen = y * blockSize + viewport.yOffset
+
+        if (viewport.shouldBeDrawn(xScreen, yScreen)) {
             graphics.fill = Color.web(blockCandidate.color)
             graphics.fillRect(viewport.xOffset + x * blockSize, viewport.yOffset + y * blockSize, blockSize, blockSize)
             neighbours.values.toList().forEach { if (it != comingFrom) it.draw(this, viewport, blockSize, graphics) }

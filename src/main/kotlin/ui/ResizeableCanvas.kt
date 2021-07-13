@@ -12,15 +12,4 @@ class ResizeableCanvas : javafx.scene.canvas.Canvas() {
     override fun prefHeight(width: Double): Double = height
     override fun prefWidth(height: Double): Double = width
 
-    var onResize = {
-        graphicsContext2D.fillOval(10.0, 10.0, 10.0, 10.0)
-        println("Drawing")
-    }
-
-    init {
-        graphicsContext2D.apply {
-            widthProperty().addListener { _, _, _ -> onResize() }
-            heightProperty().addListener { _, _, _ -> onResize() }
-        }
-    }
 }
