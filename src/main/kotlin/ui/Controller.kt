@@ -1,11 +1,14 @@
 package ui
 
 import BlockCandidate
+import assembly.Direction
+import assembly.Glue
+import assembly.GlueStrength
+import assembly.Node
 import javafx.animation.AnimationTimer
 import javafx.fxml.FXML
 import javafx.geometry.Insets
 import javafx.scene.Cursor
-import javafx.scene.canvas.GraphicsContext
 import javafx.scene.control.*
 import javafx.scene.layout.*
 import javafx.scene.paint.Color
@@ -18,7 +21,6 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import loadComponent
-import ui.Direction.*
 import java.util.concurrent.ConcurrentHashMap
 
 
@@ -97,18 +99,20 @@ class Controller(private val stage: Stage) {
     private lateinit var southStrength: ComboBox<GlueStrength>
 
     private var isSimulationRunning = false
-    private val inputFields = mutableListOf<TextField>()
-    private val digitRegex = Regex("[^0-9]")
+    private val inputFields = mutableMapOf<Direction, TextField>()
+    private val strengthBoxes = mutableMapOf<Direction, ComboBox<GlueStrength>>()
     private val candidateSet = mutableListOf<BlockCandidate>()
+    private val drawnAlready = mutableSetOf<Int>()
 
     private var currentAction: ActionType = ActionType.New
     private var currentCandidate: BlockCandidate = BlockCandidate()
 
+    private var lastX = 0.0
+    private var lastY = 0.0
+
     @FXML
     fun initialize() {
         saveButton.disableProperty().bindBidirectional(parentBox.disableProperty())
-        listOf(northStrength, eastStrength, westStrength, southStrength).forEach { it.items.setAll(*GlueStrength.values()) }
-
         canvasPane.apply {
             children.add(canvas)
             canvas.widthProperty().bind(widthProperty())
@@ -117,8 +121,6 @@ class Controller(private val stage: Stage) {
             viewport.height.bind(canvas.heightProperty())
             canvas.cursor = Cursor.OPEN_HAND
 
-            var lastX = 0.0
-            var lastY = 0.0
 
             setOnMousePressed {
                 lastX = it.x
@@ -146,24 +148,18 @@ class Controller(private val stage: Stage) {
                 scale *= event.zoomFactor
             }
 
-            inputFields.addAll(listOf(northField, southField, eastField, westField))
+            inputFields[Direction.North] = northField
+            inputFields[Direction.West] = westField
+            inputFields[Direction.East] = eastField
+            inputFields[Direction.South] = southField
+
+            strengthBoxes[Direction.North] = northStrength
+            strengthBoxes[Direction.East] = eastStrength
+            strengthBoxes[Direction.West] = westStrength
+            strengthBoxes[Direction.South] = southStrength
+            strengthBoxes.values.forEach { it.items.setAll(*GlueStrength.values()) }
+
         }
-
-        val drawnAlready = mutableSetOf<Int>()
-        object : AnimationTimer() {
-            override fun handle(now: Long) {
-                drawnAlready.clear()
-                val graphics = canvas.graphicsContext2D
-                val blockSize = blockSize * scale
-                val centerX = ((-viewport.xOffset / blockSize) + (viewport.width.value / blockSize / 2)).toInt()
-                val centerY = ((-viewport.yOffset / blockSize) + (viewport.height.value / blockSize / 2)).toInt()
-
-                val position = centerX with centerY
-                // println("$centerX, $centerY ... ${grid[position]}")
-                graphics.clearRect(0.0, 0.0, canvas.width, canvas.height)
-                grid[position]?.draw(drawnAlready, viewport, blockSize, graphics)
-            }
-        }.start()
 
         colorPicker.setOnAction {
             borderPane.background = Background(BackgroundFill(colorPicker.value, CornerRadii.EMPTY, Insets.EMPTY))
@@ -185,13 +181,14 @@ class Controller(private val stage: Stage) {
         saveButton.setOnAction {
             currentCandidate.apply {
                 if (currentAction == ActionType.Cancel) candidateSet.add(this)
-                val map = mapOf(
-                    North to northField.text.toIntOrNull(),
-                    South to southField.text.toIntOrNull(),
-                    East to eastField.text.toIntOrNull(),
-                    West to westField.text.toIntOrNull(),
-                ).mapNotNull { (key, value) -> value?.let { key to it } }.toMap()
-                sides.putAll(map)
+                val map = mutableMapOf<Direction, Glue>(
+
+                )
+
+                val northLabel = northField.text
+                val northStrength = northStrength.value
+                if (northLabel.isNotEmpty()) map[Direction.North] = Glue(northLabel, northStrength)
+
                 color = colorPicker.value.asHex
                 isSeed = isSpecialCheckbox.isSelected
             }
@@ -234,6 +231,21 @@ class Controller(private val stage: Stage) {
                 startSimulation()
             }
         }
+
+        object : AnimationTimer() {
+            override fun handle(now: Long) {
+                drawnAlready.clear()
+                val graphics = canvas.graphicsContext2D
+                val blockSize = blockSize * scale
+                val centerX = ((-viewport.xOffset / blockSize) + (viewport.width.value / blockSize / 2)).toInt()
+                val centerY = ((-viewport.yOffset / blockSize) + (viewport.height.value / blockSize / 2)).toInt()
+
+                val position = centerX with centerY
+                // println("$centerX, $centerY ... ${grid[position]}")
+                graphics.clearRect(0.0, 0.0, canvas.width, canvas.height)
+                grid[position]?.draw(drawnAlready, viewport, blockSize, graphics)
+            }
+        }.start()
     }
 
     private fun repopulateFlowPane() {
@@ -266,7 +278,8 @@ class Controller(private val stage: Stage) {
             ActionType.New -> {
                 parentBox.disableProperty().value = true
                 isSpecialCheckbox.isSelected = false
-                inputFields.forEach { it.text = "" }
+                inputFields.values.forEach { it.text = "" }
+                strengthBoxes.values.forEach { it.selectionModel.clearSelection() }
             }
             ActionType.Cancel -> {
                 parentBox.disableProperty().value = false
@@ -277,7 +290,6 @@ class Controller(private val stage: Stage) {
         newButton.text = actionType.name
     }
 
-
     private fun startSimulation() {
         val seed = candidateSet.firstOrNull { it.isSeed } ?: throw Exception("No seed in the candidates set.")
         grid.clear()
@@ -285,12 +297,14 @@ class Controller(private val stage: Stage) {
             grid[position] = this
             grow(this)
         }
+
     }
 
     private fun grow(node: Node) {
         if (!isSimulationRunning) return
         val position = node.position
         val toGrow = mutableListOf<Node>()
+
         node.blockCandidate.sides.forEach { (direction, _) ->
             val coordinate = position step direction
             val directionNode = grid[coordinate]
@@ -335,49 +349,9 @@ private infix fun Int.step(neighbour: Direction) = asCoordinates.let { (x, y) ->
     (x + neighbour.xDiff) with (y + neighbour.yDiff)
 }
 
-private val Int.asCoordinates get() = shr(16).toShort() to and(0xFFFF).toShort()
+val Int.asCoordinates get() = shr(16).toShort() to and(0xFFFF).toShort()
 private infix fun Number.with(y: Number) = (toInt() shl 16) or (y.toInt() and 0xFFFF)
 
-data class Node(
-    val position: Int,
-    val blockCandidate: BlockCandidate,
-    val neighbours: MutableMap<Direction, Node> = ConcurrentHashMap()
-) {
-
-    fun draw(drawn: MutableSet<Int>, viewport: ViewPort, blockSize: Double, graphics: GraphicsContext) {
-        if (drawn.contains(position)) return
-        drawn.add(position)
-        val coordinate = position.asCoordinates
-        val x = coordinate.first
-        val y = coordinate.second
-
-        val xScreen = x * blockSize + viewport.xOffset
-        val yScreen = y * blockSize + viewport.yOffset
-
-        if (viewport.shouldBeDrawn(xScreen + blockSize, yScreen + blockSize)) {
-            graphics.fill = Color.web(blockCandidate.color)
-            graphics.fillRect(viewport.xOffset + x * blockSize, viewport.yOffset + y * blockSize, blockSize, blockSize)
-            neighbours.values.forEach { it.draw(drawn, viewport, blockSize, graphics) }
-        }
-    }
-
-    override fun toString(): String = "Node ${position.asCoordinates}"
-}
-
-enum class Direction(val xDiff: Int, val yDiff: Int) {
-    North(0, -1),
-    South(0, 1),
-    West(-1, 0),
-    East(1, 0);
-
-    val opposite: Direction
-        get() = when (this) {
-            North -> South
-            South -> North
-            West -> East
-            East -> West
-        }
-}
 
 val Color.asHex
     get(): String = String.format(
@@ -386,11 +360,3 @@ val Color.asHex
         (green * 255).toInt(),
         (blue * 255).toInt()
     )
-
-
-enum class GlueStrength(value: Byte) {
-    None(0),
-    Weak(1),
-    Medium(2),
-    Strong(3)
-}

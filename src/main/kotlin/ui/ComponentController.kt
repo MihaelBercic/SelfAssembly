@@ -1,6 +1,7 @@
 package ui
 
 import BlockCandidate
+import assembly.Direction
 import javafx.fxml.FXML
 import javafx.scene.control.Label
 import javafx.scene.layout.GridPane

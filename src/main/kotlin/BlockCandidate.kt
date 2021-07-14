@@ -1,6 +1,7 @@
+import assembly.Direction
+import assembly.Glue
 import javafx.scene.paint.Color
 import kotlinx.serialization.Serializable
-import ui.Direction
 import ui.asHex
 
 /**
@@ -10,7 +11,7 @@ import ui.asHex
  */
 @Serializable
 data class BlockCandidate(
-    val sides: MutableMap<Direction, Int> = mutableMapOf(),
+    val sides: MutableMap<Direction, Glue> = mutableMapOf(),
     var color: String = Color.ORANGERED.asHex,
     var isSeed: Boolean = false
 )
