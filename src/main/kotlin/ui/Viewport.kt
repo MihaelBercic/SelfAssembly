@@ -15,6 +15,6 @@ data class ViewPort(
     val height: DoubleProperty = SimpleDoubleProperty(0.0)
 ) {
     fun shouldBeDrawn(x: Double, y: Double): Boolean {
-        return 0 <= x && x <= width.value && 0 <= y && y <= height.value
+        return 0 <= x && x <= width.value + xOffset && 0 <= y && y <= height.value + yOffset
     }
 }

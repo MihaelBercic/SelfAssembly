@@ -35,6 +35,9 @@ class Controller(private val stage: Stage) {
     private val blockSize = 100.0
 
     private val viewport = ViewPort()
+    private val grid = ConcurrentHashMap<Int, Node>()
+
+    private var root: Node? = null
 
     @FXML
     private lateinit var canvasPane: Pane
@@ -81,6 +84,18 @@ class Controller(private val stage: Stage) {
     @FXML
     private lateinit var startSimulationButton: Button
 
+    @FXML
+    private lateinit var northStrength: ComboBox<GlueStrength>
+
+    @FXML
+    private lateinit var eastStrength: ComboBox<GlueStrength>
+
+    @FXML
+    private lateinit var westStrength: ComboBox<GlueStrength>
+
+    @FXML
+    private lateinit var southStrength: ComboBox<GlueStrength>
+
     private var isSimulationRunning = false
     private val inputFields = mutableListOf<TextField>()
     private val digitRegex = Regex("[^0-9]")
@@ -92,6 +107,8 @@ class Controller(private val stage: Stage) {
     @FXML
     fun initialize() {
         saveButton.disableProperty().bindBidirectional(parentBox.disableProperty())
+        listOf(northStrength, eastStrength, westStrength, southStrength).forEach { it.items.setAll(*GlueStrength.values()) }
+
         canvasPane.apply {
             children.add(canvas)
             canvas.widthProperty().bind(widthProperty())
@@ -138,24 +155,15 @@ class Controller(private val stage: Stage) {
                 drawnAlready.clear()
                 val graphics = canvas.graphicsContext2D
                 val blockSize = blockSize * scale
-                val centerX = (-viewport.xOffset / blockSize).toInt()
-                val centerY = (-viewport.yOffset / blockSize).toInt()
+                val centerX = ((-viewport.xOffset / blockSize) + (viewport.width.value / blockSize / 2)).toInt()
+                val centerY = ((-viewport.yOffset / blockSize) + (viewport.height.value / blockSize / 2)).toInt()
 
                 val position = centerX with centerY
+                // println("$centerX, $centerY ... ${grid[position]}")
                 graphics.clearRect(0.0, 0.0, canvas.width, canvas.height)
-                map[position]?.draw(drawnAlready, viewport, blockSize, graphics)
+                grid[position]?.draw(drawnAlready, viewport, blockSize, graphics)
             }
         }.start()
-
-        inputFields.forEach { field ->
-            field.setOnKeyTyped { event ->
-                if (event.character.contains(digitRegex)) Alert(Alert.AlertType.ERROR, "Only digits allowed.", ButtonType.OK).apply {
-                    headerText = "Please use digits only."
-                    showAndWait()
-                    field.deletePreviousChar()
-                }
-            }
-        }
 
         colorPicker.setOnAction {
             borderPane.background = Background(BackgroundFill(colorPicker.value, CornerRadii.EMPTY, Insets.EMPTY))
@@ -269,33 +277,34 @@ class Controller(private val stage: Stage) {
         newButton.text = actionType.name
     }
 
-    private val map = ConcurrentHashMap<Int, Node>()
-    private var root: Node? = null
 
     private fun startSimulation() {
         val seed = candidateSet.firstOrNull { it.isSeed } ?: throw Exception("No seed in the candidates set.")
-        map.clear()
-        root = Node(0, seed).apply {
-            map[position] = this
+        grid.clear()
+        Node(0, seed).apply {
+            grid[position] = this
             grow(this)
         }
     }
 
     private fun grow(node: Node) {
+        if (!isSimulationRunning) return
         val position = node.position
         val toGrow = mutableListOf<Node>()
-        if (!isSimulationRunning) return
         node.blockCandidate.sides.forEach { (direction, _) ->
             val coordinate = position step direction
-            val directionNode = map[coordinate]
+            val directionNode = grid[coordinate]
             if (directionNode == null) {
                 val candidate = findAppropriate(coordinate) ?: throw Exception("No suitable candidate found.")
                 Node(coordinate, candidate).apply {
                     Direction.values().forEach { direction ->
-                        val neighbour = map[coordinate step direction]
-                        if (neighbour != null) neighbours[direction] = neighbour
+                        val neighbour = grid[coordinate step direction]
+                        if (neighbour != null) {
+                            neighbours[direction] = neighbour
+                            neighbour.neighbours[direction.opposite] = this
+                        }
                     }
-                    map[coordinate] = this
+                    grid[coordinate] = this
                     node.neighbours[direction] = this
                     toGrow.add(this)
                 }
@@ -303,7 +312,7 @@ class Controller(private val stage: Stage) {
         }
         toGrow.forEach {
             GlobalScope.launch {
-                delay(500)
+                delay(100)
                 grow(it)
             }
         }
@@ -312,7 +321,7 @@ class Controller(private val stage: Stage) {
     private fun findAppropriate(coordinate: Int): BlockCandidate? {
         val neededSides = Direction.values().mapNotNull { direction ->
             val neighbourCoordinate = coordinate step direction
-            map[neighbourCoordinate]?.blockCandidate?.sides?.get(direction.opposite)?.let { direction to it }
+            grid[neighbourCoordinate]?.blockCandidate?.sides?.get(direction.opposite)?.let { direction to it }
         }.toMap()
         return candidateSet.lastOrNull {
             val sides = it.sides
@@ -332,10 +341,11 @@ private infix fun Number.with(y: Number) = (toInt() shl 16) or (y.toInt() and 0x
 data class Node(
     val position: Int,
     val blockCandidate: BlockCandidate,
-    val neighbours: MutableMap<Direction, Node> = mutableMapOf()
+    val neighbours: MutableMap<Direction, Node> = ConcurrentHashMap()
 ) {
 
     fun draw(drawn: MutableSet<Int>, viewport: ViewPort, blockSize: Double, graphics: GraphicsContext) {
+        if (drawn.contains(position)) return
         drawn.add(position)
         val coordinate = position.asCoordinates
         val x = coordinate.first
@@ -344,10 +354,10 @@ data class Node(
         val xScreen = x * blockSize + viewport.xOffset
         val yScreen = y * blockSize + viewport.yOffset
 
-        if (viewport.shouldBeDrawn(xScreen, yScreen)) {
+        if (viewport.shouldBeDrawn(xScreen + blockSize, yScreen + blockSize)) {
             graphics.fill = Color.web(blockCandidate.color)
             graphics.fillRect(viewport.xOffset + x * blockSize, viewport.yOffset + y * blockSize, blockSize, blockSize)
-            neighbours.values.toList().forEach { if (!drawn.contains(it.position)) it.draw(drawn, viewport, blockSize, graphics) }
+            neighbours.values.forEach { it.draw(drawn, viewport, blockSize, graphics) }
         }
     }
 
@@ -376,3 +386,11 @@ val Color.asHex
         (green * 255).toInt(),
         (blue * 255).toInt()
     )
+
+
+enum class GlueStrength(value: Byte) {
+    None(0),
+    Weak(1),
+    Medium(2),
+    Strong(3)
+}
