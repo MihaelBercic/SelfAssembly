@@ -319,7 +319,7 @@ class Controller(private val stage: Stage) {
                 currentNode = this
                 grow(this)
             }
-        }
+        } else println(grid.size)
     }
 
     private fun grow(node: Node) {
@@ -349,7 +349,7 @@ class Controller(private val stage: Stage) {
         }
         toGrow.forEach {
             GlobalScope.launch {
-                delay(100)
+                delay(5)
                 grow(it)
             }
         }

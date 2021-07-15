@@ -31,7 +31,7 @@ data class Node(
             drawn[position] = 0
             graphics.fill = blockCandidate.asColor
             graphics.fillRect(xScreen, yScreen, blockSize, blockSize)
-            neighbours.values.forEach { it.draw(drawn, viewport, blockSize, graphics) }
+            // neighbours.values.forEach { it.draw(drawn, viewport, blockSize, graphics) }
         }
     }
 
