@@ -5,3 +5,4 @@ gradle.properties
 gradle/
 gradlew
 gradlew.bat
+out/
