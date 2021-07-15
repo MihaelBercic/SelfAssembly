@@ -2,7 +2,6 @@ package assembly
 
 import BlockCandidate
 import javafx.scene.canvas.GraphicsContext
-import javafx.scene.paint.Color
 import ui.ViewPort
 import ui.asCoordinates
 import java.util.concurrent.ConcurrentHashMap
@@ -18,9 +17,7 @@ data class Node(
     val neighbours: MutableMap<Direction, Node> = ConcurrentHashMap()
 ) {
 
-    fun draw(drawn: MutableSet<Int>, viewport: ViewPort, blockSize: Double, graphics: GraphicsContext) {
-        if (drawn.contains(position)) return
-        drawn.add(position)
+    fun draw(drawn: ConcurrentHashMap<Int, Byte>, viewport: ViewPort, blockSize: Double, graphics: GraphicsContext) {
         val coordinate = position.asCoordinates
         val x = coordinate.first
         val y = coordinate.second
@@ -28,9 +25,10 @@ data class Node(
         val xScreen = x * blockSize + viewport.xOffset
         val yScreen = y * blockSize + viewport.yOffset
 
-        if (viewport.shouldBeDrawn(xScreen + blockSize, yScreen + blockSize)) {
-            graphics.fill = Color.web(blockCandidate.color)
-            graphics.fillRect(viewport.xOffset + x * blockSize, viewport.yOffset + y * blockSize, blockSize, blockSize)
+        if (!drawn.containsKey(position) && viewport.shouldBeDrawn(xScreen + blockSize, yScreen + blockSize)) {
+            drawn[position] = 0
+            graphics.fill = blockCandidate.asColor
+            graphics.fillRect(xScreen, yScreen, blockSize, blockSize)
             neighbours.values.forEach { it.draw(drawn, viewport, blockSize, graphics) }
         }
     }

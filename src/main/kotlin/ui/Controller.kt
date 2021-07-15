@@ -6,10 +6,13 @@ import assembly.Glue
 import assembly.GlueStrength
 import assembly.Node
 import javafx.animation.AnimationTimer
+import javafx.event.ActionEvent
 import javafx.fxml.FXML
 import javafx.geometry.Insets
 import javafx.scene.Cursor
+import javafx.scene.SnapshotParameters
 import javafx.scene.control.*
+import javafx.scene.image.WritableImage
 import javafx.scene.layout.*
 import javafx.scene.paint.Color
 import javafx.stage.FileChooser
@@ -22,6 +25,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import loadComponent
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.LinkedBlockingQueue
 
 
 /**
@@ -102,13 +106,15 @@ class Controller(private val stage: Stage) {
     private val inputFields = mutableMapOf<Direction, TextField>()
     private val strengthBoxes = mutableMapOf<Direction, ComboBox<GlueStrength>>()
     private val candidateSet = mutableListOf<BlockCandidate>()
-    private val drawnAlready = mutableSetOf<Int>()
+    private val drawnAlready = ConcurrentHashMap<Int, Byte>()
 
     private var currentAction: ActionType = ActionType.New
     private var currentCandidate: BlockCandidate = BlockCandidate()
 
     private var lastX = 0.0
     private var lastY = 0.0
+    private var currentNode: Node? = null
+    private val drawingQueue = LinkedBlockingQueue<Node>()
 
     @FXML
     fun initialize() {
@@ -121,15 +127,11 @@ class Controller(private val stage: Stage) {
             viewport.height.bind(canvas.heightProperty())
             canvas.cursor = Cursor.OPEN_HAND
 
-
             setOnMousePressed {
                 lastX = it.x
                 lastY = it.y
                 canvas.cursor = Cursor.CLOSED_HAND
-            }
-
-            setOnMouseReleased {
-                canvas.cursor = Cursor.OPEN_HAND
+                findNode()
             }
 
             setOnMouseDragged { event ->
@@ -139,9 +141,13 @@ class Controller(private val stage: Stage) {
                 lastY = event.y
             }
 
-            setOnScroll { event ->
-                viewport.xOffset += event.deltaX
-                viewport.yOffset += event.deltaY
+            setOnMouseReleased {
+                canvas.cursor = Cursor.OPEN_HAND
+                findNode()
+            }
+
+            setOnZoomFinished {
+                findNode()
             }
 
             setOnZoom { event ->
@@ -157,12 +163,15 @@ class Controller(private val stage: Stage) {
             strengthBoxes[Direction.East] = eastStrength
             strengthBoxes[Direction.West] = westStrength
             strengthBoxes[Direction.South] = southStrength
-            strengthBoxes.values.forEach { it.items.setAll(*GlueStrength.values()) }
+            strengthBoxes.values.forEach {
+                it.items.setAll(*GlueStrength.values())
+                it.selectionModel.select(0)
+            }
 
         }
 
-        colorPicker.setOnAction {
-            borderPane.background = Background(BackgroundFill(colorPicker.value, CornerRadii.EMPTY, Insets.EMPTY))
+        colorPicker.valueProperty().addListener { _, old, new ->
+            borderPane.background = Background(BackgroundFill(new, CornerRadii.EMPTY, Insets.EMPTY))
         }
 
         newButton.setOnAction {
@@ -178,74 +187,38 @@ class Controller(private val stage: Stage) {
             }
         }
 
-        saveButton.setOnAction {
-            currentCandidate.apply {
-                if (currentAction == ActionType.Cancel) candidateSet.add(this)
-                val map = mutableMapOf<Direction, Glue>(
-
-                )
-
-                val northLabel = northField.text
-                val northStrength = northStrength.value
-                if (northLabel.isNotEmpty()) map[Direction.North] = Glue(northLabel, northStrength)
-
-                color = colorPicker.value.asHex
-                isSeed = isSpecialCheckbox.isSelected
-            }
-            setAction(ActionType.New)
-            currentCandidate = BlockCandidate()
-            repopulateFlowPane()
-        }
-
-        exportButton.setOnAction {
-            FileChooser().apply {
-                title = "Select export location"
-                initialFileName = "Block-Candidates.json"
-                selectedExtensionFilter = FileChooser.ExtensionFilter("JSON", "*.json")
-                showSaveDialog(stage)?.apply {
-                    createNewFile()
-                    writeText(Json.encodeToString(candidateSet))
-                }
-            }
-        }
-        importButton.setOnAction {
-            FileChooser().apply {
-                title = "Select file to import"
-                selectedExtensionFilter = FileChooser.ExtensionFilter("JSON", "*.json")
-                showOpenDialog(stage)?.apply {
-                    candidateSet.clear()
-                    candidateSet.addAll(Json.decodeFromString(readText()))
-                    repopulateFlowPane()
-                    setAction(ActionType.New)
-                }
-            }
-        }
-
-        startSimulationButton.setOnAction {
-            isSimulationRunning = !isSimulationRunning
-            startSimulationButton.text = if (isSimulationRunning) "Stop simulation" else "Start simulation"
-
-            if (isSimulationRunning) {
-                viewport.xOffset = canvas.width / 2
-                viewport.yOffset = canvas.height / 2
-                startSimulation()
-            }
-        }
 
         object : AnimationTimer() {
             override fun handle(now: Long) {
-                drawnAlready.clear()
-                val graphics = canvas.graphicsContext2D
-                val blockSize = blockSize * scale
-                val centerX = ((-viewport.xOffset / blockSize) + (viewport.width.value / blockSize / 2)).toInt()
-                val centerY = ((-viewport.yOffset / blockSize) + (viewport.height.value / blockSize / 2)).toInt()
+                canvas.graphicsContext2D.apply {
+                    clearRect(0.0, 0.0, canvas.width, canvas.height)
+                    drawnAlready.clear()
+                    currentNode?.draw(drawnAlready, viewport, blockSize * scale, this)
+                }
 
-                val position = centerX with centerY
-                // println("$centerX, $centerY ... ${grid[position]}")
-                graphics.clearRect(0.0, 0.0, canvas.width, canvas.height)
-                grid[position]?.draw(drawnAlready, viewport, blockSize, graphics)
             }
         }.start()
+    }
+
+    private fun findNode() {
+        val width = canvas.width.toInt()
+        val height = canvas.height.toInt()
+        val writableImage = WritableImage(width, height)
+        val snapshotParameters = SnapshotParameters()
+        val snapshot = canvas.snapshot(snapshotParameters, writableImage)
+        val pixelReader = snapshot.pixelReader
+        for (x in 0 until width) {
+            for (y in 0 until height) {
+                if (pixelReader.getColor(x, y) != Color.WHITE) {
+                    val blockSize = blockSize * scale
+                    val centerX = ((-viewport.xOffset / blockSize) + (x / blockSize)).toInt()
+                    val centerY = ((-viewport.yOffset / blockSize) + (x / blockSize)).toInt()
+
+                    val position = centerX with centerY
+                    grid[position]?.let { currentNode = it }
+                }
+            }
+        }
     }
 
     private fun repopulateFlowPane() {
@@ -260,6 +233,11 @@ class Controller(private val stage: Stage) {
                     southField.text = controller.southLabel.text
                     eastField.text = controller.eastLabel.text
                     westField.text = controller.westLabel.text
+
+                    northStrength.selectionModel.select(blockCandidate.sides[Direction.North]?.strength ?: GlueStrength.None)
+                    westStrength.selectionModel.select(blockCandidate.sides[Direction.West]?.strength ?: GlueStrength.None)
+                    eastStrength.selectionModel.select(blockCandidate.sides[Direction.East]?.strength ?: GlueStrength.None)
+                    southStrength.selectionModel.select(blockCandidate.sides[Direction.South]?.strength ?: GlueStrength.None)
                     isSpecialCheckbox.isSelected = currentCandidate.isSeed
 
                     Color.web(blockCandidate.color).apply {
@@ -279,25 +257,75 @@ class Controller(private val stage: Stage) {
                 parentBox.disableProperty().value = true
                 isSpecialCheckbox.isSelected = false
                 inputFields.values.forEach { it.text = "" }
-                strengthBoxes.values.forEach { it.selectionModel.clearSelection() }
             }
-            ActionType.Cancel -> {
-                parentBox.disableProperty().value = false
-            }
-            ActionType.Remove -> parentBox.disableProperty().value = false
+            ActionType.Cancel, ActionType.Remove -> parentBox.disableProperty().value = false
         }
         currentAction = actionType
         newButton.text = actionType.name
     }
 
-    private fun startSimulation() {
-        val seed = candidateSet.firstOrNull { it.isSeed } ?: throw Exception("No seed in the candidates set.")
-        grid.clear()
-        Node(0, seed).apply {
-            grid[position] = this
-            grow(this)
+    @FXML
+    private fun exportData(event: ActionEvent) {
+        FileChooser().apply {
+            title = "Select export location"
+            initialFileName = "Block-Candidates.json"
+            selectedExtensionFilter = FileChooser.ExtensionFilter("JSON", "*.json")
+            showSaveDialog(stage)?.apply {
+                createNewFile()
+                writeText(Json.encodeToString(candidateSet))
+            }
         }
+    }
 
+    @FXML
+    private fun importData(event: ActionEvent) {
+        FileChooser().apply {
+            title = "Select file to import"
+            selectedExtensionFilter = FileChooser.ExtensionFilter("JSON", "*.json")
+            showOpenDialog(stage)?.apply {
+                candidateSet.clear()
+                candidateSet.addAll(Json.decodeFromString(readText()))
+                repopulateFlowPane()
+                setAction(ActionType.New)
+            }
+        }
+    }
+
+    @FXML
+    private fun save(event: ActionEvent) {
+        currentCandidate.apply {
+            if (currentAction == ActionType.Cancel) candidateSet.add(this)
+            val map = mutableMapOf(
+                Direction.North to Glue(northField.text, northStrength.value),
+                Direction.West to Glue(westField.text, westStrength.value),
+                Direction.East to Glue(eastField.text, eastStrength.value),
+                Direction.South to Glue(southField.text, southStrength.value)
+            ).filter { it.value.strength != GlueStrength.None && it.value.label.isNotEmpty() }
+            sides.putAll(map)
+            color = colorPicker.value.asHex
+            isSeed = isSpecialCheckbox.isSelected
+        }
+        setAction(ActionType.New)
+        currentCandidate = BlockCandidate()
+        repopulateFlowPane()
+    }
+
+    @FXML
+    private fun startSimulation(event: ActionEvent) {
+        isSimulationRunning = !isSimulationRunning
+        startSimulationButton.text = if (isSimulationRunning) "Stop simulation" else "Start simulation"
+
+        if (isSimulationRunning) {
+            viewport.xOffset = canvas.width / 2
+            viewport.yOffset = canvas.height / 2
+            val seed = candidateSet.firstOrNull { it.isSeed } ?: throw Exception("No seed in the candidates set.")
+            grid.clear()
+            Node(0, seed).apply {
+                grid[position] = this
+                currentNode = this
+                grow(this)
+            }
+        }
     }
 
     private fun grow(node: Node) {
@@ -321,6 +349,7 @@ class Controller(private val stage: Stage) {
                     grid[coordinate] = this
                     node.neighbours[direction] = this
                     toGrow.add(this)
+                    drawingQueue.add(this)
                 }
             }
         }

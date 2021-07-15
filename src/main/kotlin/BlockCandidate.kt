@@ -14,4 +14,6 @@ data class BlockCandidate(
     val sides: MutableMap<Direction, Glue> = mutableMapOf(),
     var color: String = Color.ORANGERED.asHex,
     var isSeed: Boolean = false
-)
+) {
+    val asColor: Color by lazy { Color.web(color) }
+}

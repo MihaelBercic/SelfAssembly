@@ -64,7 +64,7 @@
                   <Pane fx:id="canvasPane" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS" />
                   <HBox alignment="CENTER" prefHeight="50.0" prefWidth="200.0">
                      <children>
-                        <Button fx:id="startSimulationButton" mnemonicParsing="false" text="Start simulation" />
+                        <Button fx:id="startSimulationButton" mnemonicParsing="false" onAction="#startSimulation" text="Start simulation" />
                      </children>
                   </HBox>
                </children>
@@ -124,9 +124,9 @@
                   <HBox prefHeight="100.0" prefWidth="200.0" spacing="10.0">
                      <children>
                         <Button fx:id="newButton" mnemonicParsing="false" text="New" />
-                        <Button fx:id="saveButton" disable="true" mnemonicParsing="false" text="Save" />
-                        <Button fx:id="importButton" mnemonicParsing="false" text="Import" />
-                        <Button fx:id="exportButton" mnemonicParsing="false" text="Export" />
+                        <Button fx:id="saveButton" disable="true" mnemonicParsing="false" onAction="#save" text="Save" />
+                        <Button fx:id="importButton" mnemonicParsing="false" onAction="#importData" text="Import" />
+                        <Button fx:id="exportButton" mnemonicParsing="false" onAction="#exportData" text="Export" />
                      </children>
                   </HBox>
                   <FlowPane fx:id="flowPane" hgap="5.0" prefHeight="200.0" prefWidth="200.0" style="-fx-background-color: rgba(0,0,0, .03);" vgap="5.0" VBox.vgrow="ALWAYS">

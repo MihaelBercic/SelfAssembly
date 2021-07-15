@@ -8,9 +8,8 @@ import kotlinx.serialization.Serializable
  * using IntelliJ IDEA
  */
 @Serializable
-enum class GlueStrength(value: Byte) {
+enum class GlueStrength(val power: Byte) {
     None(0),
     Weak(1),
-    Medium(2),
-    Strong(3)
+    Strong(2)
 }
