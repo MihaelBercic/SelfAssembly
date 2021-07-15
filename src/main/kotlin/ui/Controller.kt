@@ -3,6 +3,7 @@ package ui
 import BlockCandidate
 import assembly.*
 import javafx.animation.AnimationTimer
+import javafx.application.Platform
 import javafx.event.ActionEvent
 import javafx.fxml.FXML
 import javafx.geometry.Insets
@@ -14,16 +15,10 @@ import javafx.scene.layout.*
 import javafx.scene.paint.Color
 import javafx.stage.FileChooser
 import javafx.stage.Stage
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import loadComponent
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.LinkedBlockingQueue
-
 
 /**
  * Created by Mihael Valentin Berčič
@@ -38,7 +33,7 @@ class Controller(private val stage: Stage) {
     private val blockSize = 100.0
 
     private val viewport = ViewPort()
-    private val grid = ConcurrentHashMap<Int, Node>()
+    private val grid = mutableMapOf<Int, Node>()
 
     private var root: Node? = null
 
@@ -103,7 +98,7 @@ class Controller(private val stage: Stage) {
     private val inputFields = mutableMapOf<Direction, TextField>()
     private val strengthBoxes = mutableMapOf<Direction, ComboBox<GlueStrength>>()
     private val candidateSet = mutableListOf<BlockCandidate>()
-    private val drawnAlready = ConcurrentHashMap<Int, Byte>()
+    private val drawnAlready = mutableSetOf<Int>()
 
     private var currentAction: ActionType = ActionType.New
     private var currentCandidate: BlockCandidate = BlockCandidate()
@@ -111,7 +106,6 @@ class Controller(private val stage: Stage) {
     private var lastX = 0.0
     private var lastY = 0.0
     private var currentNode: Node? = null
-    private val drawingQueue = LinkedBlockingQueue<Node>()
 
     @FXML
     fun initialize() {
@@ -343,13 +337,11 @@ class Controller(private val stage: Stage) {
                     grid[coordinate] = this
                     node.neighbours[direction] = this
                     toGrow.add(this)
-                    drawingQueue.add(this)
                 }
             }
         }
-        toGrow.forEach {
-            GlobalScope.launch {
-                delay(5)
+        Platform.runLater {
+            toGrow.forEach {
                 grow(it)
             }
         }
