@@ -1,10 +1,7 @@
 package ui
 
 import BlockCandidate
-import assembly.Direction
-import assembly.Glue
-import assembly.GlueStrength
-import assembly.Node
+import assembly.*
 import javafx.animation.AnimationTimer
 import javafx.event.ActionEvent
 import javafx.fxml.FXML
@@ -146,13 +143,10 @@ class Controller(private val stage: Stage) {
                 findNode()
             }
 
-            setOnZoomFinished {
-                findNode()
-            }
+            setOnZoomFinished { findNode() }
+            setOnScrollStarted { findNode() }
 
-            setOnZoom { event ->
-                scale *= event.zoomFactor
-            }
+            setOnScroll { event -> scale += event.deltaY / 500 }
 
             inputFields[Direction.North] = northField
             inputFields[Direction.West] = westField
@@ -337,7 +331,7 @@ class Controller(private val stage: Stage) {
             val coordinate = position step direction
             val directionNode = grid[coordinate]
             if (directionNode == null) {
-                val candidate = findAppropriate(coordinate) ?: throw Exception("No suitable candidate found.")
+                val candidate = findAppropriate(coordinate, Model.ATAM) ?: throw Exception("No suitable candidate found.")
                 Node(coordinate, candidate).apply {
                     Direction.values().forEach { direction ->
                         val neighbour = grid[coordinate step direction]
@@ -361,14 +355,18 @@ class Controller(private val stage: Stage) {
         }
     }
 
-    private fun findAppropriate(coordinate: Int): BlockCandidate? {
-        val neededSides = Direction.values().mapNotNull { direction ->
-            val neighbourCoordinate = coordinate step direction
-            grid[neighbourCoordinate]?.blockCandidate?.sides?.get(direction.opposite)?.let { direction to it }
-        }.toMap()
+    private fun findAppropriate(coordinate: Int, model: Model): BlockCandidate? {
+        when (model) {
+            Model.ATAM -> {
+
+            }
+            else -> TODO("Implement other algorithms.")
+        }
+
+        val futureNeighbours = Direction.values().mapNotNull { grid[coordinate step it]?.getOpposite(it) }.toMap()
         return candidateSet.lastOrNull {
             val sides = it.sides
-            neededSides.all { (direction, value) -> sides[direction] == value }
+            futureNeighbours.all { (direction, value) -> sides[direction] == value }
         }
 
     }

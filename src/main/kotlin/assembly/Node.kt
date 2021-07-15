@@ -17,6 +17,8 @@ data class Node(
     val neighbours: MutableMap<Direction, Node> = ConcurrentHashMap()
 ) {
 
+    fun getOpposite(direction: Direction) = blockCandidate.sides[direction.opposite]?.let { direction to it }
+
     fun draw(drawn: ConcurrentHashMap<Int, Byte>, viewport: ViewPort, blockSize: Double, graphics: GraphicsContext) {
         val coordinate = position.asCoordinates
         val x = coordinate.first
