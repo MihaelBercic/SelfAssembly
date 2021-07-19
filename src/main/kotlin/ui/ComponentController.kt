@@ -53,10 +53,11 @@ class ComponentController(val candidate: BlockCandidate) {
             display.first.text = value.label
             display.second.width = value.strength.power * 3.0
         }
+        gridPane.style += "-fx-background-color: ${candidate.colorCode};"
 
         if (candidate.isSeed) gridPane.style += "-fx-border-style: dashed;" +
                 "-fx-border-width: 2;" +
-                "-fx-border-color: blue;"
+                "-fx-border-colorCode: blue;"
 
     }
 }

@@ -1,24 +1,29 @@
 package ui
 
 import BlockCandidate
-import assembly.*
+import assembly.Direction
+import assembly.Glue
+import assembly.GlueStrength
+import assembly.Model
 import javafx.animation.AnimationTimer
-import javafx.application.Platform
 import javafx.event.ActionEvent
 import javafx.fxml.FXML
 import javafx.geometry.Insets
 import javafx.scene.Cursor
-import javafx.scene.SnapshotParameters
 import javafx.scene.control.*
-import javafx.scene.image.WritableImage
 import javafx.scene.layout.*
 import javafx.scene.paint.Color
 import javafx.stage.FileChooser
 import javafx.stage.Stage
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import loadComponent
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.random.Random
 
 /**
  * Created by Mihael Valentin Berčič
@@ -33,9 +38,7 @@ class Controller(private val stage: Stage) {
     private val blockSize = 100.0
 
     private val viewport = ViewPort()
-    private val grid = mutableMapOf<Int, Node>()
-
-    private var root: Node? = null
+    private val grid = ConcurrentHashMap<Int, BlockCandidate>()
 
     @FXML
     private lateinit var canvasPane: Pane
@@ -98,14 +101,12 @@ class Controller(private val stage: Stage) {
     private val inputFields = mutableMapOf<Direction, TextField>()
     private val strengthBoxes = mutableMapOf<Direction, ComboBox<GlueStrength>>()
     private val candidateSet = mutableListOf<BlockCandidate>()
-    private val drawnAlready = mutableSetOf<Int>()
 
     private var currentAction: ActionType = ActionType.New
     private var currentCandidate: BlockCandidate = BlockCandidate()
 
     private var lastX = 0.0
     private var lastY = 0.0
-    private var currentNode: Node? = null
 
     @FXML
     fun initialize() {
@@ -122,7 +123,6 @@ class Controller(private val stage: Stage) {
                 lastX = it.x
                 lastY = it.y
                 canvas.cursor = Cursor.CLOSED_HAND
-                findNode()
             }
 
             setOnMouseDragged { event ->
@@ -132,15 +132,12 @@ class Controller(private val stage: Stage) {
                 lastY = event.y
             }
 
-            setOnMouseReleased {
-                canvas.cursor = Cursor.OPEN_HAND
-                findNode()
+            setOnMouseReleased { canvas.cursor = Cursor.OPEN_HAND }
+
+            setOnScroll { event ->
+                scale += event.deltaY / 1000
+
             }
-
-            setOnZoomFinished { findNode() }
-            setOnScrollStarted { findNode() }
-
-            setOnScroll { event -> scale += event.deltaY / 500 }
 
             inputFields[Direction.North] = northField
             inputFields[Direction.West] = westField
@@ -180,40 +177,35 @@ class Controller(private val stage: Stage) {
             override fun handle(now: Long) {
                 canvas.graphicsContext2D.apply {
                     clearRect(0.0, 0.0, canvas.width, canvas.height)
-                    drawnAlready.clear()
-                    currentNode?.draw(drawnAlready, viewport, blockSize * scale, this)
+                    val size = blockSize * scale
+                    val min = (-viewport.xOffset / size).toInt()
+                    val max = ((-viewport.xOffset + viewport.width.value) / size).toInt()
+
+                    val minY = (-viewport.yOffset / size).toInt()
+                    val maxY = ((-viewport.yOffset + viewport.height.value) / size).toInt()
+
+                    // println("$size = [$min ... $max ]")
+                    for (x in min..max) {
+                        for (y in minY..maxY) {
+                            grid[x with y]?.apply {
+                                fill = asColor
+                                stroke = asColor
+                                strokeRect(viewport.xOffset + x * size, viewport.yOffset + y * size, size, size)
+                                fillRect(viewport.xOffset + x * size, viewport.yOffset + y * size, size, size)
+                            }
+                        }
+                    }
                 }
 
             }
         }.start()
     }
 
-    private fun findNode() {
-        val width = canvas.width.toInt()
-        val height = canvas.height.toInt()
-        val writableImage = WritableImage(width, height)
-        val snapshotParameters = SnapshotParameters()
-        val snapshot = canvas.snapshot(snapshotParameters, writableImage)
-        val pixelReader = snapshot.pixelReader
-        for (x in 0 until width) {
-            for (y in 0 until height) {
-                if (pixelReader.getColor(x, y) != Color.WHITE) {
-                    val blockSize = blockSize * scale
-                    val centerX = ((-viewport.xOffset / blockSize) + (x / blockSize)).toInt()
-                    val centerY = ((-viewport.yOffset / blockSize) + (x / blockSize)).toInt()
-
-                    val position = centerX with centerY
-                    grid[position]?.let { currentNode = it }
-                }
-            }
-        }
-    }
-
     private fun repopulateFlowPane() {
         val components = candidateSet.map { blockCandidate ->
             val controller = ComponentController(blockCandidate)
             loadComponent("/BlockComponent.fxml", controller).apply {
-                style += "-fx-background-color: ${blockCandidate.color};"
+                style += "-fx-background-colorCode: ${blockCandidate.colorCode};"
                 setOnMouseClicked {
                     currentCandidate = blockCandidate
                     setAction(ActionType.Remove)
@@ -228,7 +220,7 @@ class Controller(private val stage: Stage) {
                     southStrength.selectionModel.select(blockCandidate.sides[Direction.South]?.strength ?: GlueStrength.None)
                     isSpecialCheckbox.isSelected = currentCandidate.isSeed
 
-                    Color.web(blockCandidate.color).apply {
+                    Color.web(blockCandidate.colorCode).apply {
                         colorPicker.value = this
                         borderPane.background = Background(BackgroundFill(this, CornerRadii.EMPTY, Insets.EMPTY))
                     }
@@ -290,7 +282,7 @@ class Controller(private val stage: Stage) {
                 Direction.South to Glue(southField.text, southStrength.value)
             ).filter { it.value.strength != GlueStrength.None && it.value.label.isNotEmpty() }
             sides.putAll(map)
-            color = colorPicker.value.asHex
+            colorCode = colorPicker.value.asHex
             isSeed = isSpecialCheckbox.isSelected
         }
         setAction(ActionType.New)
@@ -308,59 +300,42 @@ class Controller(private val stage: Stage) {
             viewport.yOffset = canvas.height / 2
             val seed = candidateSet.firstOrNull { it.isSeed } ?: throw Exception("No seed in the candidates set.")
             grid.clear()
-            Node(0, seed).apply {
-                grid[position] = this
-                currentNode = this
-                grow(this)
-            }
+            grid[0] = seed
+            grow(0, seed)
         } else println(grid.size)
     }
 
-    private fun grow(node: Node) {
+    private fun grow(position: Int, candidate: BlockCandidate) {
         if (!isSimulationRunning) return
-        val position = node.position
-        val toGrow = mutableListOf<Node>()
-
-        node.blockCandidate.sides.forEach { (direction, _) ->
-            val coordinate = position step direction
-            val directionNode = grid[coordinate]
-            if (directionNode == null) {
-                val candidate = findAppropriate(coordinate, Model.ATAM) ?: throw Exception("No suitable candidate found.")
-                Node(coordinate, candidate).apply {
-                    Direction.values().forEach { direction ->
-                        val neighbour = grid[coordinate step direction]
-                        if (neighbour != null) {
-                            neighbours[direction] = neighbour
-                            neighbour.neighbours[direction.opposite] = this
-                        }
+        candidate.sides.keys.forEach { direction ->
+            val neighbourCoordinate = position step direction
+            if (!grid.containsKey(neighbourCoordinate)) {
+                GlobalScope.launch {
+                    delay(100)
+                    findAppropriate(neighbourCoordinate, Model.ATAM)?.apply {
+                        grid[neighbourCoordinate] = this
+                        grow(neighbourCoordinate, this)
                     }
-                    grid[coordinate] = this
-                    node.neighbours[direction] = this
-                    toGrow.add(this)
                 }
             }
         }
-        Platform.runLater {
-            toGrow.forEach {
-                grow(it)
-            }
-        }
+
     }
 
     private fun findAppropriate(coordinate: Int, model: Model): BlockCandidate? {
+        if (grid.containsKey(coordinate)) return null
+
+        val futureNeighbours = Direction.values().mapNotNull { grid[coordinate step it]?.getOpposite(it) }.toMap()
+
         when (model) {
             Model.ATAM -> {
 
             }
             else -> TODO("Implement other algorithms.")
         }
-
-        val futureNeighbours = Direction.values().mapNotNull { grid[coordinate step it]?.getOpposite(it) }.toMap()
-        return candidateSet.lastOrNull {
-            val sides = it.sides
-            futureNeighbours.all { (direction, value) -> sides[direction] == value }
+        return candidateSet.firstOrNull { candidate ->
+            futureNeighbours.all { (direction, value) -> candidate.sides[direction] == value }
         }
-
     }
 }
 

@@ -12,8 +12,10 @@ import ui.asHex
 @Serializable
 data class BlockCandidate(
     val sides: MutableMap<Direction, Glue> = mutableMapOf(),
-    var color: String = Color.ORANGERED.asHex,
+    var colorCode: String = Color.ORANGERED.asHex,
     var isSeed: Boolean = false
 ) {
-    val asColor: Color by lazy { Color.web(color) }
+    val asColor: Color by lazy { Color.web(colorCode) }
+
+    fun getOpposite(direction: Direction) = direction to sides[direction.opposite]
 }
