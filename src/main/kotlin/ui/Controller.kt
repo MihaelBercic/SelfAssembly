@@ -15,6 +15,7 @@ import javafx.scene.layout.*
 import javafx.scene.paint.Color
 import javafx.stage.FileChooser
 import javafx.stage.Stage
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -23,7 +24,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import loadComponent
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.random.Random
+import kotlin.math.exp
 
 /**
  * Created by Mihael Valentin Berčič
@@ -97,6 +98,25 @@ class Controller(private val stage: Stage) {
     @FXML
     private lateinit var southStrength: ComboBox<GlueStrength>
 
+    @FXML
+    private lateinit var algorithmBox: ComboBox<Model>
+
+    @FXML
+    private lateinit var kineticPane: VBox
+
+    @FXML
+    private lateinit var gseSlider: Slider
+
+    @FXML
+    private lateinit var gmcSlider: Slider
+
+    @FXML
+    private lateinit var gmcLabel: Label
+
+    @FXML
+    private lateinit var gseLabel: Label
+
+
     private var isSimulationRunning = false
     private val inputFields = mutableMapOf<Direction, TextField>()
     private val strengthBoxes = mutableMapOf<Direction, ComboBox<GlueStrength>>()
@@ -109,126 +129,17 @@ class Controller(private val stage: Stage) {
     private var lastY = 0.0
 
     @FXML
-    fun initialize() {
-        saveButton.disableProperty().bindBidirectional(parentBox.disableProperty())
-        canvasPane.apply {
-            children.add(canvas)
-            canvas.widthProperty().bind(widthProperty())
-            canvas.heightProperty().bind(heightProperty())
-            viewport.width.bind(canvas.widthProperty())
-            viewport.height.bind(canvas.heightProperty())
-            canvas.cursor = Cursor.OPEN_HAND
-
-            setOnMousePressed {
-                lastX = it.x
-                lastY = it.y
-                canvas.cursor = Cursor.CLOSED_HAND
-            }
-
-            setOnMouseDragged { event ->
-                viewport.xOffset += event.x - lastX
-                viewport.yOffset += event.y - lastY
-                lastX = event.x
-                lastY = event.y
-            }
-
-            setOnMouseReleased { canvas.cursor = Cursor.OPEN_HAND }
-
-            setOnScroll { event ->
-                scale += event.deltaY / 1000
-
-            }
-
-            inputFields[Direction.North] = northField
-            inputFields[Direction.West] = westField
-            inputFields[Direction.East] = eastField
-            inputFields[Direction.South] = southField
-
-            strengthBoxes[Direction.North] = northStrength
-            strengthBoxes[Direction.East] = eastStrength
-            strengthBoxes[Direction.West] = westStrength
-            strengthBoxes[Direction.South] = southStrength
-            strengthBoxes.values.forEach {
-                it.items.setAll(*GlueStrength.values())
-                it.selectionModel.select(0)
-            }
-
-        }
-
-        colorPicker.valueProperty().addListener { _, old, new ->
-            borderPane.background = Background(BackgroundFill(new, CornerRadii.EMPTY, Insets.EMPTY))
-        }
-
-        newButton.setOnAction {
-            when (currentAction) {
-                ActionType.New -> setAction(ActionType.Cancel)
-                ActionType.Cancel, ActionType.Remove -> {
-                    if (currentAction == ActionType.Remove) {
-                        candidateSet.remove(currentCandidate)
-                        repopulateFlowPane()
-                    }
-                    setAction(ActionType.New)
+    fun newTile(event: ActionEvent) {
+        when (currentAction) {
+            ActionType.New -> setAction(ActionType.Cancel)
+            ActionType.Cancel, ActionType.Remove -> {
+                if (currentAction == ActionType.Remove) {
+                    candidateSet.remove(currentCandidate)
+                    repopulateFlowPane()
                 }
+                setAction(ActionType.New)
             }
         }
-
-
-        object : AnimationTimer() {
-            override fun handle(now: Long) {
-                canvas.graphicsContext2D.apply {
-                    clearRect(0.0, 0.0, canvas.width, canvas.height)
-                    val size = blockSize * scale
-                    val min = (-viewport.xOffset / size).toInt()
-                    val max = ((-viewport.xOffset + viewport.width.value) / size).toInt()
-
-                    val minY = (-viewport.yOffset / size).toInt()
-                    val maxY = ((-viewport.yOffset + viewport.height.value) / size).toInt()
-
-                    // println("$size = [$min ... $max ]")
-                    for (x in min..max) {
-                        for (y in minY..maxY) {
-                            grid[x with y]?.apply {
-                                fill = asColor
-                                stroke = asColor
-                                strokeRect(viewport.xOffset + x * size, viewport.yOffset + y * size, size, size)
-                                fillRect(viewport.xOffset + x * size, viewport.yOffset + y * size, size, size)
-                            }
-                        }
-                    }
-                }
-
-            }
-        }.start()
-    }
-
-    private fun repopulateFlowPane() {
-        val components = candidateSet.map { blockCandidate ->
-            val controller = ComponentController(blockCandidate)
-            loadComponent("/BlockComponent.fxml", controller).apply {
-                style += "-fx-background-colorCode: ${blockCandidate.colorCode};"
-                setOnMouseClicked {
-                    currentCandidate = blockCandidate
-                    setAction(ActionType.Remove)
-                    northField.text = controller.northLabel.text
-                    southField.text = controller.southLabel.text
-                    eastField.text = controller.eastLabel.text
-                    westField.text = controller.westLabel.text
-
-                    northStrength.selectionModel.select(blockCandidate.sides[Direction.North]?.strength ?: GlueStrength.None)
-                    westStrength.selectionModel.select(blockCandidate.sides[Direction.West]?.strength ?: GlueStrength.None)
-                    eastStrength.selectionModel.select(blockCandidate.sides[Direction.East]?.strength ?: GlueStrength.None)
-                    southStrength.selectionModel.select(blockCandidate.sides[Direction.South]?.strength ?: GlueStrength.None)
-                    isSpecialCheckbox.isSelected = currentCandidate.isSeed
-
-                    Color.web(blockCandidate.colorCode).apply {
-                        colorPicker.value = this
-                        borderPane.background = Background(BackgroundFill(this, CornerRadii.EMPTY, Insets.EMPTY))
-                    }
-                    setAction(ActionType.Remove)
-                }
-            }
-        }
-        flowPane.children.setAll(components)
     }
 
     private fun setAction(actionType: ActionType) {
@@ -290,6 +201,7 @@ class Controller(private val stage: Stage) {
         repopulateFlowPane()
     }
 
+    @DelicateCoroutinesApi
     @FXML
     private fun startSimulation(event: ActionEvent) {
         isSimulationRunning = !isSimulationRunning
@@ -305,6 +217,7 @@ class Controller(private val stage: Stage) {
         } else println(grid.size)
     }
 
+    @DelicateCoroutinesApi
     private fun grow(position: Int, candidate: BlockCandidate) {
         if (!isSimulationRunning) return
         candidate.sides.keys.forEach { direction ->
@@ -312,7 +225,7 @@ class Controller(private val stage: Stage) {
             if (!grid.containsKey(neighbourCoordinate)) {
                 GlobalScope.launch {
                     delay(100)
-                    findAppropriate(neighbourCoordinate, Model.ATAM)?.apply {
+                    findAppropriate(neighbourCoordinate, algorithmBox.value)?.apply {
                         grid[neighbourCoordinate] = this
                         grow(neighbourCoordinate, this)
                     }
@@ -326,18 +239,146 @@ class Controller(private val stage: Stage) {
         if (grid.containsKey(coordinate)) return null
 
         val futureNeighbours = Direction.values().mapNotNull { grid[coordinate step it]?.getOpposite(it) }.toMap()
+        val rateForward = exp(-gmcSlider.value)
 
-        when (model) {
-            Model.ATAM -> {
+        return when (model) {
+            Model.Abstract -> candidateSet.firstOrNull { candidate ->
+                futureNeighbours.all { (direction, value) -> candidate.sides[direction] == value }
+            }
+            Model.Kinetic -> candidateSet.maxByOrNull { candidate ->
+                val strengthTotal = candidate.sides.values.sumOf { it.strength.power }
+                val rateRemove = exp(strengthTotal * -gseSlider.value)
 
+                rateForward / rateRemove
             }
             else -> TODO("Implement other algorithms.")
         }
-        return candidateSet.firstOrNull { candidate ->
-            futureNeighbours.all { (direction, value) -> candidate.sides[direction] == value }
+    }
+
+    private fun repopulateFlowPane() {
+        val components = candidateSet.map { blockCandidate ->
+            val controller = ComponentController(blockCandidate)
+            loadComponent("/BlockComponent.fxml", controller).apply {
+                style += "-fx-background-colorCode: ${blockCandidate.colorCode};"
+                setOnMouseClicked {
+                    currentCandidate = blockCandidate
+                    setAction(ActionType.Remove)
+                    northField.text = controller.northLabel.text
+                    southField.text = controller.southLabel.text
+                    eastField.text = controller.eastLabel.text
+                    westField.text = controller.westLabel.text
+
+                    northStrength.selectionModel.select(blockCandidate.sides[Direction.North]?.strength ?: GlueStrength.None)
+                    westStrength.selectionModel.select(blockCandidate.sides[Direction.West]?.strength ?: GlueStrength.None)
+                    eastStrength.selectionModel.select(blockCandidate.sides[Direction.East]?.strength ?: GlueStrength.None)
+                    southStrength.selectionModel.select(blockCandidate.sides[Direction.South]?.strength ?: GlueStrength.None)
+                    isSpecialCheckbox.isSelected = currentCandidate.isSeed
+
+                    Color.web(blockCandidate.colorCode).apply {
+                        colorPicker.value = this
+                        borderPane.background = Background(BackgroundFill(this, CornerRadii.EMPTY, Insets.EMPTY))
+                    }
+                    setAction(ActionType.Remove)
+                }
+            }
         }
+        flowPane.children.setAll(components)
+    }
+
+    @FXML
+    fun initialize() {
+        gmcSlider.valueProperty().addListener { _, _, newValue ->
+            gmcLabel.text = "Gmc: %.2f".format(newValue)
+        }
+        gseSlider.valueProperty().addListener { _, _, newValue ->
+            gseLabel.text = "Gse: %.2f".format(newValue)
+        }
+        saveButton.disableProperty().bindBidirectional(parentBox.disableProperty())
+        canvasPane.apply {
+            children.add(canvas)
+            canvas.widthProperty().bind(widthProperty())
+            canvas.heightProperty().bind(heightProperty())
+            viewport.width.bind(canvas.widthProperty())
+            viewport.height.bind(canvas.heightProperty())
+            canvas.cursor = Cursor.OPEN_HAND
+
+            setOnMousePressed {
+                lastX = it.x
+                lastY = it.y
+                canvas.cursor = Cursor.CLOSED_HAND
+            }
+
+            setOnMouseDragged { event ->
+                viewport.xOffset += event.x - lastX
+                viewport.yOffset += event.y - lastY
+                lastX = event.x
+                lastY = event.y
+            }
+
+            setOnMouseReleased { canvas.cursor = Cursor.OPEN_HAND }
+
+            setOnScroll { event ->
+                scale += event.deltaY / 1000
+
+            }
+        }
+
+        inputFields[Direction.North] = northField
+        inputFields[Direction.West] = westField
+        inputFields[Direction.East] = eastField
+        inputFields[Direction.South] = southField
+
+        strengthBoxes[Direction.North] = northStrength
+        strengthBoxes[Direction.East] = eastStrength
+        strengthBoxes[Direction.West] = westStrength
+        strengthBoxes[Direction.South] = southStrength
+        strengthBoxes.values.forEach {
+            it.items.setAll(*GlueStrength.values())
+            it.selectionModel.select(0)
+        }
+
+        algorithmBox.apply {
+            items.setAll(*Model.values())
+            selectionModel.select(0)
+            valueProperty().addListener { observable, oldValue, newValue ->
+                when (newValue) {
+                    Model.Abstract, Model.TwoHanded -> kineticPane.isVisible = false
+                    Model.Kinetic -> kineticPane.isVisible = true
+                }
+            }
+        }
+
+        colorPicker.valueProperty().addListener { _, _, new -> borderPane.style = "-fx-background-color: ${new.asHex}" }
+
+        object : AnimationTimer() {
+            override fun handle(now: Long) {
+                canvas.graphicsContext2D.apply {
+                    clearRect(0.0, 0.0, canvas.width, canvas.height)
+                    val size = blockSize * scale
+                    val min = (-viewport.xOffset / size).toInt()
+                    val max = ((-viewport.xOffset + viewport.width.value) / size).toInt()
+
+                    val minY = (-viewport.yOffset / size).toInt()
+                    val maxY = ((-viewport.yOffset + viewport.height.value) / size).toInt()
+
+                    // println("$size = [$min ... $max ]")
+                    for (x in min..max) {
+                        for (y in minY..maxY) {
+                            grid[x with y]?.apply {
+                                fill = asColor
+                                stroke = asColor
+                                strokeRect(viewport.xOffset + x * size, viewport.yOffset + y * size, size, size)
+                                fillRect(viewport.xOffset + x * size, viewport.yOffset + y * size, size, size)
+                            }
+                        }
+                    }
+                }
+
+            }
+        }.start()
     }
 }
+
 
 private infix fun Int.step(neighbour: Direction) = asCoordinates.let { (x, y) ->
     (x + neighbour.xDiff) with (y + neighbour.yDiff)

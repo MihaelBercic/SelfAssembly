@@ -5,65 +5,38 @@
 <?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ColorPicker?>
 <?import javafx.scene.control.ComboBox?>
-<?import javafx.scene.control.Menu?>
-<?import javafx.scene.control.MenuBar?>
-<?import javafx.scene.control.MenuItem?>
-<?import javafx.scene.control.SeparatorMenuItem?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Slider?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.FlowPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Pane?>
+<?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 
 <VBox prefHeight="500.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1">
   <children>
-    <MenuBar VBox.vgrow="NEVER">
-      <menus>
-        <Menu mnemonicParsing="false" text="File">
-          <items>
-            <MenuItem mnemonicParsing="false" text="New" />
-            <MenuItem mnemonicParsing="false" text="Open…" />
-            <Menu mnemonicParsing="false" text="Open Recent" />
-            <SeparatorMenuItem mnemonicParsing="false" />
-            <MenuItem mnemonicParsing="false" text="Close" />
-            <MenuItem mnemonicParsing="false" text="Save" />
-            <MenuItem mnemonicParsing="false" text="Save As…" />
-            <MenuItem mnemonicParsing="false" text="Revert" />
-            <SeparatorMenuItem mnemonicParsing="false" />
-            <MenuItem mnemonicParsing="false" text="Preferences…" />
-            <SeparatorMenuItem mnemonicParsing="false" />
-            <MenuItem mnemonicParsing="false" text="Quit" />
-          </items>
-        </Menu>
-        <Menu mnemonicParsing="false" text="Edit">
-          <items>
-            <MenuItem mnemonicParsing="false" text="Undo" />
-            <MenuItem mnemonicParsing="false" text="Redo" />
-            <SeparatorMenuItem mnemonicParsing="false" />
-            <MenuItem mnemonicParsing="false" text="Cut" />
-            <MenuItem mnemonicParsing="false" text="Copy" />
-            <MenuItem mnemonicParsing="false" text="Paste" />
-            <MenuItem mnemonicParsing="false" text="Delete" />
-            <SeparatorMenuItem mnemonicParsing="false" />
-            <MenuItem mnemonicParsing="false" text="Select All" />
-            <MenuItem mnemonicParsing="false" text="Unselect All" />
-          </items>
-        </Menu>
-        <Menu mnemonicParsing="false" text="Help">
-          <items>
-            <MenuItem mnemonicParsing="false" text="About MyHelloApp" />
-          </items>
-        </Menu>
-      </menus>
-    </MenuBar>
       <HBox VBox.vgrow="ALWAYS">
          <children>
             <VBox HBox.hgrow="ALWAYS">
                <children>
                   <Pane fx:id="canvasPane" prefHeight="200.0" prefWidth="200.0" VBox.vgrow="ALWAYS" />
-                  <HBox alignment="CENTER" prefHeight="50.0" prefWidth="200.0">
+                  <HBox alignment="CENTER" prefHeight="100.0" prefWidth="200.0" spacing="10.0">
                      <children>
+                        <StackPane prefHeight="150.0" prefWidth="100.0">
+                           <children>
+                              <VBox fx:id="kineticPane" prefHeight="200.0" prefWidth="100.0" spacing="5.0" visible="false" StackPane.alignment="CENTER">
+                                 <children>
+                                    <Label fx:id="gmcLabel" text="Gmc" />
+                                    <Slider fx:id="gmcSlider" blockIncrement="0.1" majorTickUnit="1.0" max="1.0" minorTickCount="1" showTickLabels="true" showTickMarks="true" />
+                                    <Label fx:id="gseLabel" layoutX="10.0" layoutY="10.0" text="Gse:" />
+                                    <Slider fx:id="gseSlider" blockIncrement="0.1" layoutX="10.0" layoutY="10.0" majorTickUnit="1.0" max="1.0" minorTickCount="1" showTickLabels="true" showTickMarks="true" />
+                                 </children>
+                              </VBox>
+                           </children>
+                        </StackPane>
+                        <ComboBox fx:id="algorithmBox" prefWidth="150.0" />
                         <Button fx:id="startSimulationButton" mnemonicParsing="false" onAction="#startSimulation" text="Start simulation" />
                      </children>
                   </HBox>
@@ -123,7 +96,7 @@
                   </HBox>
                   <HBox prefHeight="100.0" prefWidth="200.0" spacing="10.0">
                      <children>
-                        <Button fx:id="newButton" mnemonicParsing="false" text="New" />
+                        <Button fx:id="newButton" mnemonicParsing="false" onAction="#newTile" text="New" />
                         <Button fx:id="saveButton" disable="true" mnemonicParsing="false" onAction="#save" text="Save" />
                         <Button fx:id="importButton" mnemonicParsing="false" onAction="#importData" text="Import" />
                         <Button fx:id="exportButton" mnemonicParsing="false" onAction="#exportData" text="Export" />

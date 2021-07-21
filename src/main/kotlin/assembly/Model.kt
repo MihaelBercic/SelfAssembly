@@ -6,7 +6,7 @@ package assembly
  * using IntelliJ IDEA
  */
 enum class Model {
-    ATAM,
-    KTAM,
-    HAM
+    Abstract,
+    Kinetic,
+    TwoHanded
 }
